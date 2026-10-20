@@ -55,7 +55,7 @@ jobs:
           brew bundle
           command -v cmake >/dev/null || brew install cmake
 
-      - name: Build the toolchain (scoped: release, no assertions)
+      - name: Build the toolchain (release, no assertions)
         working-directory: swift
         run: ./utils/build-script --release --no-assertions --skip-build-benchmarks
 
