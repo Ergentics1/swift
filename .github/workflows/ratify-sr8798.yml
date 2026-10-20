@@ -1,16 +1,29 @@
 name: Ratify SR-8798 — Random.swift validation on a built stdlib
 
-# The machinery ratifying itself: build the standard library from the
-# fix branch on a macOS 26 runner and run the repo's own validation
-# file (validation-test/stdlib/Random.swift, including the new
-# wide-range tests) against it. Closes the "one support short" on
-# the SR-8798 lattice run (The Lattice, Part XVIII, quirk Q-025).
-# Fork-only; nothing here goes upstream.
+# Run #2 configuration, per PREFLIGHT-RUN2.md (the post-PR
+# review's pre-flight checklist, completed before this run):
 #
-# Trigger design: pushing this file to the fix branch fires it (the
-# paths filter keeps later code-only pushes from re-running a
-# multi-hour build; editing this file re-fires it). Manual runs via
-# workflow_dispatch.
+# - Runner: macos-26-intel — x86_64, 4 CPU / 14 GB, a standard
+#   GitHub-hosted label. x86_64 matters: Random.swift guards
+#   its Float80 cases to i386/x86_64, so this run witnesses
+#   Float80 as well as Float and Double. Run #1 used the bare
+#   macos-26 label (arm64), which could not.
+# - Build scope, decided rather than inherited: --release
+#   (Release variant of everything; Run #1 used the
+#   RelWithDebInfo default) and --no-assertions (Run #1 had
+#   assertions on). Both flags verified against this tree's
+#   utils/build_swift driver arguments. The validation file's
+#   checks do not depend on assertions or debug info.
+# - Run #1 failed environmentally at 99% of the build
+#   (temp-write I/O error building swift-plugin-server) and
+#   never reached the validation file. Full record:
+#   sr-8798-ratify/RUN-RECORD.md in the exercise notes.
+#
+# Trigger design (unchanged from Run #1): pushing this file
+# to the fix branch fires it (the paths filter keeps later
+# code-only pushes from re-running a multi-hour build;
+# editing this file re-fires it). Manual runs via
+# workflow_dispatch. Fork-only; nothing here goes upstream.
 
 on:
   push:
@@ -24,7 +37,7 @@ permissions:
 jobs:
   ratify:
     name: Build stdlib, run Random.swift validation
-    runs-on: macos-26
+    runs-on: macos-26-intel
     timeout-minutes: 355
     steps:
       - name: Check out the fix branch as swift/
@@ -42,9 +55,9 @@ jobs:
           brew bundle
           command -v cmake >/dev/null || brew install cmake
 
-      - name: Build the toolchain (no test phase)
+      - name: Build the toolchain (scoped: release, no assertions)
         working-directory: swift
-        run: ./utils/build-script --skip-build-benchmarks
+        run: ./utils/build-script --release --no-assertions --skip-build-benchmarks
 
       - name: Run the Random.swift validation file
         run: |
