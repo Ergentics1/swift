@@ -287,6 +287,39 @@ RandomTests.test("random floating point range maxes") {
 #endif
 }
 
+// Ranges whose width overflows the type (SR-8798)
+
+func floatingPointWideRangeTest<T: BinaryFloatingPoint>(_ type: T.Type)
+  where T.RawSignificand: FixedWidthInteger {
+
+  let testRange = 0 ..< 1_000
+  let max = T.greatestFiniteMagnitude
+
+  // open range
+  let openRange: Range<T> = -max ..< max
+  for _ in testRange {
+    let random = T.random(in: openRange)
+    expectTrue(openRange.contains(random))
+    expectTrue(random.isFinite)
+  }
+
+  // closed range
+  let closedRange: ClosedRange<T> = -max ... max
+  for _ in testRange {
+    let random = T.random(in: closedRange)
+    expectTrue(closedRange.contains(random))
+    expectTrue(random.isFinite)
+  }
+}
+
+RandomTests.test("random floating points in wide ranges") {
+  floatingPointWideRangeTest(Float.self)
+  floatingPointWideRangeTest(Double.self)
+#if !os(Windows) && (arch(i386) || arch(x86_64))
+  floatingPointWideRangeTest(Float80.self)
+#endif
+}
+
 // Uniform Distribution
 
 func chi2Test(_ samples: [Double]) -> Bool {
