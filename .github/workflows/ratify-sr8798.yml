@@ -1,0 +1,63 @@
+name: Ratify SR-8798 — Random.swift validation on a built stdlib
+
+# The machinery ratifying itself: build the standard library from the
+# fix branch on a macOS 26 runner and run the repo's own validation
+# file (validation-test/stdlib/Random.swift, including the new
+# wide-range tests) against it. Closes the "one support short" on
+# the SR-8798 lattice run (The Lattice, Part XVIII, quirk Q-025).
+# Fork-only; nothing here goes upstream.
+#
+# Trigger design: pushing this file to the fix branch fires it (the
+# paths filter keeps later code-only pushes from re-running a
+# multi-hour build; editing this file re-fires it). Manual runs via
+# workflow_dispatch.
+
+on:
+  push:
+    branches: [fix/sr-8798-wide-range-random]
+    paths: ['.github/workflows/ratify-sr8798.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ratify:
+    name: Build stdlib, run Random.swift validation
+    runs-on: macos-26
+    timeout-minutes: 355
+    steps:
+      - name: Check out the fix branch as swift/
+        uses: actions/checkout@v4
+        with:
+          ref: fix/sr-8798-wide-range-random
+          path: swift
+
+      - name: Fetch sibling repositories
+        run: ./swift/utils/update-checkout --clone --scheme main --skip-history
+
+      - name: Install build tools (repo Brewfile + cmake)
+        working-directory: swift
+        run: |
+          brew bundle
+          command -v cmake >/dev/null || brew install cmake
+
+      - name: Build the toolchain (no test phase)
+        working-directory: swift
+        run: ./utils/build-script --skip-build-benchmarks
+
+      - name: Run the Random.swift validation file
+        run: |
+          BUILD_DIR="$(find "$GITHUB_WORKSPACE/build" -maxdepth 2 -type d -name 'swift-macosx-*' | head -n 1)"
+          echo "build dir: $BUILD_DIR"
+          set -o pipefail
+          ./swift/utils/run-test --build-dir "$BUILD_DIR" \
+            "$GITHUB_WORKSPACE/swift/validation-test/stdlib/Random.swift" \
+            2>&1 | tee "$GITHUB_WORKSPACE/ratify.log"
+
+      - name: Upload the lit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ratify-log
+          path: ratify.log
