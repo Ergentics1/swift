@@ -53,14 +53,8 @@ extension BinaryFloatingPoint where Self.RawSignificand: FixedWidthInteger {
       !range.isEmpty,
       "Can't get random value with an empty range"
     )
-    let delta = range.upperBound - range.lowerBound
-    //  TODO: this still isn't quite right, because the computation of delta
-    //  can overflow (e.g. if .upperBound = .maximumFiniteMagnitude and
-    //  .lowerBound = -.upperBound); this should be re-written with an
-    //  algorithm that handles that case correctly, but this precondition
-    //  is an acceptable short-term fix.
     _precondition(
-      delta.isFinite,
+      range.lowerBound.isFinite && range.upperBound.isFinite,
       "There is no uniform distribution on an infinite range"
     )
     let rand: Self.RawSignificand
@@ -75,7 +69,22 @@ extension BinaryFloatingPoint where Self.RawSignificand: FixedWidthInteger {
       rand = generator.next() & (maxSignificand - 1)
     }
     let unitRandom = Self.init(rand) * (Self.ulpOfOne / 2)
-    let randFloat = delta * unitRandom + range.lowerBound
+    let delta = range.upperBound - range.lowerBound
+    if delta.isFinite {
+      let randFloat = delta * unitRandom + range.lowerBound
+      if randFloat == range.upperBound {
+        return Self.random(in: range, using: &generator)
+      }
+      return randFloat
+    }
+    // The bounds are finite, but their difference overflows (e.g. the
+    // range is -greatestFiniteMagnitude..<greatestFiniteMagnitude).
+    // Halving a floating-point value is exact, and so is doubling it,
+    // so sample in the halved range, whose width cannot overflow, and
+    // scale the result back up.
+    let halfDelta = range.upperBound / 2 - range.lowerBound / 2
+    let halfRandom = halfDelta * unitRandom + range.lowerBound / 2
+    let randFloat = halfRandom * 2
     if randFloat == range.upperBound {
       return Self.random(in: range, using: &generator)
     }
@@ -153,14 +162,8 @@ extension BinaryFloatingPoint where Self.RawSignificand: FixedWidthInteger {
       !range.isEmpty,
       "Can't get random value with an empty range"
     )
-    let delta = range.upperBound - range.lowerBound
-    //  TODO: this still isn't quite right, because the computation of delta
-    //  can overflow (e.g. if .upperBound = .maximumFiniteMagnitude and
-    //  .lowerBound = -.upperBound); this should be re-written with an
-    //  algorithm that handles that case correctly, but this precondition
-    //  is an acceptable short-term fix.
     _precondition(
-      delta.isFinite,
+      range.lowerBound.isFinite && range.upperBound.isFinite,
       "There is no uniform distribution on an infinite range"
     )
     let rand: Self.RawSignificand
@@ -179,8 +182,18 @@ extension BinaryFloatingPoint where Self.RawSignificand: FixedWidthInteger {
       }
     }
     let unitRandom = Self.init(rand) * (Self.ulpOfOne / 2)
-    let randFloat = delta * unitRandom + range.lowerBound
-    return randFloat
+    let delta = range.upperBound - range.lowerBound
+    if delta.isFinite {
+      return delta * unitRandom + range.lowerBound
+    }
+    // The bounds are finite, but their difference overflows (e.g. the
+    // range is -greatestFiniteMagnitude...greatestFiniteMagnitude).
+    // Halving a floating-point value is exact, and so is doubling it,
+    // so sample in the halved range, whose width cannot overflow, and
+    // scale the result back up.
+    let halfDelta = range.upperBound / 2 - range.lowerBound / 2
+    let halfRandom = halfDelta * unitRandom + range.lowerBound / 2
+    return halfRandom * 2
   }
   
   /// Returns a random value within the specified range.
